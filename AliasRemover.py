@@ -4,12 +4,12 @@ Created on 21. aug. 2013
 @author: Fero Hajnovic
 
 Recursively searches for all .cs files in the current directory and inside 
-them replaces all C# aliases for their formal equivalents. A report is made
-both in a console and stored in the the directory of the script. A backup of 
-all the .cs files is made here as well.
+them tries to detect use of C# aliases. A report is made
+both in a console and stored in the the directory of the script. 
+
+Please note that the removing (replacing) functionality is not yet present
 
 Location of the report file: given by REP_FILE
-Location of the backups: given by BCK_DIR
 '''
 
 #############################################
@@ -19,7 +19,6 @@ Location of the backups: given by BCK_DIR
 import fnmatch
 import os
 import re
-import shutil
 import sys
 
 #############################################
@@ -27,50 +26,152 @@ import sys
 #############################################
 
 REP_FILE = './AliasRemoverReport.txt'
-BCK_DIR = './AliasRemoverBackups'
-TMP_FILE = './AliasRemoverTempFile.cs'
+SEP_SIZE = 120
+LONGEST_ALIAS = 20
 
 #############################################
 # Functions
 #############################################
 
 """
-Replaces C# aliases with their formal equivalents
+Returns True if the last characters of allchars match the word
 """
-def changeline(line):
-    # ignore enum declarations - there have to be an alias used
-    if (re.search(r'\benum\b', line) != None):
-        return line
+def match(allchars, word):
+    if (len(allchars) < len(word)):
+        return False
     
-    # ignore comments
-    if (re.match(r'//', line.lstrip()) != None):
-        return line
-    if (re.match(r'/\*', line.lstrip()) != None):
-        return line
-    if (re.match(r'\*', line.lstrip()) != None):
-        return line
-    
-    line = re.sub(r'\bbool\b', "Boolean", line)
-    line = re.sub(r'\bbyte\b', "Byte", line)
-    line = re.sub(r'\bsbyte\b', "SByte", line)
-    line = re.sub(r'\bchar\b', "Char", line)
-    
-    line = re.sub(r'\bdecimal\b', "Decimal", line)
-    line = re.sub(r'\bdouble\b', "Double", line)
-    line = re.sub(r'\bfloat\b', "Single", line)
-    line = re.sub(r'\bint\b', "Int32", line)
-    line = re.sub(r'\buint\b', "UInt32", line)
-    
-    line = re.sub(r'\blong\b', "Int64", line)
-    line = re.sub(r'\bulong\b', "Int64", line)
-    line = re.sub(r'\bobject\b', "Object", line)
-    line = re.sub(r'\bshort\b', "Int16", line)
-    line = re.sub(r'\bushort\b', "UInt16", line)
-    
-    line = re.sub(r'\bstring\b', "String", line)
-    
-    return line
+    for i in range(1, 1 + len(word)):
+        if (allchars[-i] != word[-i]):
+            return False
+        
+    return True
 
+"""
+Returns Match object if the alias matches at the end of allchars.
+None otherwise
+"""
+def matchalias(allchars, alias):
+    strallchars = ''.join(allchars[-LONGEST_ALIAS:])
+    if (allchars[-1] == '\n'):
+        strallchars += '\n'
+    pattern = r'\b(' + alias + r')\b.$'
+    m = re.search(pattern, strallchars, re.DOTALL)
+            
+    return m
+
+"""
+Returns Match object of an alias that matches the end of allchars
+None - if no alias matches
+"""
+def matchaliases(allchars):
+    strallchars = ''.join(allchars[-LONGEST_ALIAS:])
+    if (allchars[-1] == '\n'):
+        strallchars += '\n'
+    pattern = r'\b(bool|byte|sbyte|char|decimal|double|float|int|unit|long|ulong|object|short|ushort|string)\b.$'
+    m = re.search(pattern, strallchars, re.DOTALL)
+            
+    return m
+
+"""
+Returns a list of triples (alias, row, col) of detected aliases along
+with their line number (row) and column (col)
+"""
+def getaliases(lines):
+    aliases = []
+    
+    allchars = []
+    
+    incmt = False
+    instr = False
+    inmacro = False
+    
+    lncnt = len(lines)
+    lnfrac = lncnt / 100
+    perc = 0;
+    
+    ln = 0;
+    for line in lines:
+        if (ln > perc * lnfrac):
+            perc += 1
+            print(str(perc) + '%')
+        ln += 1
+        
+        chn = 0
+        for char in line:
+            chn += 1
+            allchars.append(char)
+            
+            # we're processing code where int is really int
+            if (incmt == False and instr == False and inmacro == False):
+                if match(allchars, r'//'):
+                    break
+                if match(allchars, r'#'):
+                    break
+                if match(allchars, r'/*'):
+                    incmt = True
+                    continue
+                if match(allchars, r'"'):
+                    instr = True
+                    continue
+                
+                aliasmatch = matchaliases(allchars)
+                if (aliasmatch != None):
+                    alias = aliasmatch.group(1)
+                    row = ln
+                    col = chn - len(alias)
+                    aliases.append([alias, row, col])
+               
+            # in comment     
+            if (incmt):
+                if match(allchars, r'*/'):
+                    incmt = False
+                    continue
+            
+            # in string literal
+            if (instr):
+                if (match(allchars, r'"') and not match(allchars, r'\"')):
+                    instr = False
+                    continue
+                
+            # in macro preprocessing
+            if (inmacro):
+                pass
+    
+    return aliases
+
+"""
+Returns the lines where tabs are expanded
+"""
+def expandtabs(lines):
+    newlines = []
+    for line in lines:
+        newlines.append(line.expandtabs(4))
+        
+    return newlines
+
+"""
+Looks for C# aliases in the document
+"""
+def analysedoc(lines):
+    lines = expandtabs(lines)
+    aliases = getaliases(lines)
+    
+    for alias in aliases:
+        al = alias[0]
+        row = alias[1]
+        col = alias[2]
+        
+        logstr('Alias "{0}" found at {1}:{2}'.format(al, row, col))
+        logstr('-' * SEP_SIZE)
+        logstr(lines[row - 1].rstrip())
+        logstr(' ' * (col - 1) + '^')
+        logstr('*' * SEP_SIZE)
+        
+    return
+    
+"""
+Log a string into the report file and console
+"""
 def logstr(msg):
     print(msg)
     repfile.write(msg + "\n")
@@ -79,61 +180,38 @@ def logstr(msg):
 # Main
 #############################################
 
+filpat = r'.*'
+if (len(sys.argv) > 1):
+    filpat = sys.argv[1]
+
 # go the directory where this script is located
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # get the C# files
 csfiles = []
 for root, dirnames, filenames in os.walk('.'):
-    if (os.path.basename(root) == os.path.basename(BCK_DIR)):
-        continue
     for filename in fnmatch.filter(filenames, '*.cs'):
-        csfiles.append(os.path.join(root, filename))
-
-# make backup for all of them
-if not os.path.exists(BCK_DIR):
-    os.makedirs(BCK_DIR)
-for fname in csfiles:
-    shutil.copyfile(fname, os.path.join(BCK_DIR, os.path.basename(fname)))
-
-# make sure the temporary file is not present
-try:
-    os.remove(TMP_FILE)
-except Exception:
-    pass
+        fullpath = os.path.join(root, filename)
+        if (re.search(filpat, fullpath)):
+            csfiles.append(fullpath)
 
 #create a report file
 repfile = open(REP_FILE, 'w')
 
 # process each .cs file
 for fname in csfiles:
-    logstr("Checking file :" + fname)
+    logstr('|' * 80)
+    logstr("\nChecking file :" + fname + '\n')
+    logstr('|' * 80 + '\n')
     
     file = open(fname, "r")
     lines = file.readlines()
-    
-    newfile = open(TMP_FILE, "w")
-    
-    cntr = 1
-    for line in lines:
-        newline = changeline(line)
-        newfile.write(newline)
-        if (line != newline):
-            report = ("    Changed line " + str(cntr) + "\n" 
-                      "    Old line: '" + line.rstrip() + "'\n"
-                      "    New line: '" + newline.rstrip() + "'")
-            logstr(report)
-        
-        cntr += 1
-        
     file.close()
-    newfile.close()
+        
+    analysedoc(lines)
     
-    shutil.copyfile(TMP_FILE, fname)
+repfile.close()
     
-# remove the temporary file
-os.remove(TMP_FILE)
-
 # get the user a chance to see the output
 print("Press any key to finish")
 sys.stdin.read(1)    
