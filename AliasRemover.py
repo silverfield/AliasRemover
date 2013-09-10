@@ -20,6 +20,7 @@ import fnmatch
 import os
 import re
 import sys
+import getopt
 
 #############################################
 # Constants
@@ -156,6 +157,9 @@ def analysedoc(lines):
     lines = expandtabs(lines)
     aliases = getaliases(lines)
     
+    if (len(aliases) > 0):
+        logstr('*' * SEP_SIZE)
+    
     for alias in aliases:
         al = alias[0]
         row = alias[1]
@@ -176,42 +180,72 @@ def logstr(msg):
     print(msg)
     repfile.write(msg + "\n")
 
+def printhelp():
+    print("""
+A script to check C# files for use of aliases. So far the aliases are only 
+detected. A report of found aliases is made both in a console and in a file
+{0}
+
+Usage: AliasRemover.py [options]
+
+Options:
+-h|--help: displays this help
+-p|--pattern <pattern>: determines the pattern which the paths of the .cs 
+files have to match in order to be checked. Full path of the file is checked 
+with the re.search function of Python.
+        """.format(REP_FILE))
+
 #############################################
 # Main
 #############################################
-
-filpat = r'.*'
-if (len(sys.argv) > 1):
-    filpat = sys.argv[1]
-
-# go the directory where this script is located
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
-# get the C# files
-csfiles = []
-for root, dirnames, filenames in os.walk('.'):
-    for filename in fnmatch.filter(filenames, '*.cs'):
-        fullpath = os.path.join(root, filename)
-        if (re.search(filpat, fullpath)):
-            csfiles.append(fullpath)
-
+          
 #create a report file
 repfile = open(REP_FILE, 'w')
-
-# process each .cs file
-for fname in csfiles:
-    logstr('|' * 80)
-    logstr("\nChecking file :" + fname + '\n')
-    logstr('|' * 80 + '\n')
-    
-    file = open(fname, "r")
-    lines = file.readlines()
-    file.close()
+          
+def main(argv):
+    # parse command line args
+    filpat = r'.*'
+    try:
+        opts, args = getopt.getopt(argv,"hp:",["help", "pattern="])
+    except getopt.GetoptError:
+        printhelp()
+        sys.exit()         
         
-    analysedoc(lines)
+    for opt, arg in opts:
+        if opt == '-h':
+            printhelp()
+            sys.exit()
+        elif opt in ("-p", "--pattern"):
+            filpat = arg
+            
+    # go the directory where this script is located
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     
-repfile.close()
+    # get the C# files
+    csfiles = []
+    for root, dirnames, filenames in os.walk('.'):
+        for filename in fnmatch.filter(filenames, '*.cs'):
+            fullpath = os.path.join(root, filename)
+            if (re.search(filpat, fullpath)):
+                csfiles.append(fullpath)
     
-# get the user a chance to see the output
-print("Press any key to finish")
-sys.stdin.read(1)    
+    # process each .cs file
+    for fname in csfiles:
+        logstr('\n\n|' * SEP_SIZE)
+        logstr("Checking file :" + fname)
+        logstr('|' * SEP_SIZE + '\n\n')
+        
+        file = open(fname, "r")
+        lines = file.readlines()
+        file.close()
+            
+        analysedoc(lines)
+        
+    repfile.close()
+        
+    # get the user a chance to see the output
+    print("Press any key to finish")
+    sys.stdin.read(1)    
+            
+if __name__ == "__main__":
+    main(sys.argv[1:])
