@@ -231,7 +231,7 @@ def main(argv):
     
     # process each .cs file
     for fname in csfiles:
-        logstr('\n\n|' * SEP_SIZE)
+        logstr('\n\n' + '|' * SEP_SIZE)
         logstr("Checking file :" + fname)
         logstr('|' * SEP_SIZE + '\n\n')
         
