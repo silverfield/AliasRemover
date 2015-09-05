@@ -1,11 +1,14 @@
 # AliasRemover
-Detecting and making report for the usage of C# aliases
+Detecting and making report for the usage of C# aliases - such as int instead of Int32, or double instead of Double...
 
-# Longer description
+## Longer description
 
-Recursively searches for all .cs files in the current directory and inside them tries to detect use of C# aliases. A report is made
-both in a console and stored in the the directory of the script. 
+Recursively searches for all .cs files in the directory tree starting from the current directory (where the AliasRemover.py is located) and detects the use of C# aliases in them. A report is made both in console and stored in the the directory of the script. 
 
-Please note that the removing (replacing) functionality is not yet present
+Location of the final report file can be altered by setting the REP_FILE value in the python script. Default is ./AliasRemoverReport.txt
 
-Location of the report file is given by REP_FILE value in the python script. Default being ./AliasRemoverReport.txt
+## Notes
+
+Please note that the removing (replacing) functionality is not yet present.
+
+Run with Python3
